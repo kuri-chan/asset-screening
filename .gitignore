@@ -1,0 +1,15 @@
+# キャッシュ・出力
+__pycache__/
+*.pyc
+cache/
+output/
+
+# データ
+data/
+
+# 機密情報
+.env
+*.env
+
+# macOS
+.DS_Store
