@@ -15,7 +15,7 @@ import pandas as pd
 from pathlib import Path
 
 
-JPX_UNIVERSE_FILE = Path("./data/data_j.xls")
+JPX_UNIVERSE_FILE = Path("./data/data_j.xlsx")
 
 
 def load_prime_universe() -> pd.DataFrame:
