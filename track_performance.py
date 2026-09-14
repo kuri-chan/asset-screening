@@ -28,9 +28,11 @@ import pandas as pd
 import yfinance as yf
 
 import config
+from yf_session import get_session
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
 logger = logging.getLogger(__name__)
+_session = get_session()
 
 PERF_DIR = Path(config.OUTPUT_DIR) / "performance"
 PERF_DIR.mkdir(parents=True, exist_ok=True)
@@ -42,7 +44,7 @@ BENCHMARK_NAME = "TOPIX ETF(1306)"
 def get_price_on_date(ticker: str, date_str: str) -> float | None:
     """指定日(または直近営業日)の終値を取得する。"""
     try:
-        tk = yf.Ticker(ticker)
+        tk = yf.Ticker(ticker, session=_session)
         start = (pd.Timestamp(date_str) - pd.Timedelta(days=5)).strftime("%Y-%m-%d")
         end = (pd.Timestamp(date_str) + pd.Timedelta(days=2)).strftime("%Y-%m-%d")
         hist = tk.history(start=start, end=end)
@@ -63,7 +65,7 @@ def get_price_on_date(ticker: str, date_str: str) -> float | None:
 def get_current_price(ticker: str) -> float | None:
     """現在の株価を取得する。"""
     try:
-        tk = yf.Ticker(ticker)
+        tk = yf.Ticker(ticker, session=_session)
         hist = tk.history(period="5d")
         if hist.empty:
             return None

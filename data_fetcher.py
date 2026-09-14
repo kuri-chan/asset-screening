@@ -25,8 +25,10 @@ import pandas as pd
 import yfinance as yf
 
 import config
+from yf_session import get_session
 
 logger = logging.getLogger(__name__)
+_session = get_session()
 
 
 def fetch_basic_metrics(ticker: str) -> dict:
@@ -49,7 +51,7 @@ def fetch_basic_metrics(ticker: str) -> dict:
     }
 
     try:
-        t = yf.Ticker(ticker)
+        t = yf.Ticker(ticker, session=_session)
         info = t.info
 
         if not info or "marketCap" not in info:
@@ -118,7 +120,7 @@ def fetch_cashflow_metrics(ticker: str) -> dict:
     }
 
     try:
-        t = yf.Ticker(ticker)
+        t = yf.Ticker(ticker, session=_session)
         cashflow = t.cashflow
         bs = t.balance_sheet
         fin = t.financials
@@ -164,7 +166,7 @@ def calc_op_margin_trend(ticker: str) -> Optional[float]:
     直近期の営業利益率 - 3期前の営業利益率 (パーセントポイント)
     """
     try:
-        t = yf.Ticker(ticker)
+        t = yf.Ticker(ticker, session=_session)
         fin = t.financials
         if fin.empty or len(fin.columns) < 3:
             return None
