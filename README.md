@@ -125,3 +125,39 @@ config.py の閾値をいじって、スクリーニング条件のチューニ�
 
 Week 1 のスクリーニング機能が動いたら、Week 2 のマクロレポート機能に進む。
 詳細は `07_mvp_roadmap.md` 参照。
+
+## 結果の永続化(前週比較・Notion保存)
+
+### output/ はgit管理下(2026-09-21〜)
+
+週次エージェントは毎回新しいコンテナで動くため、`output/`(スクリーニング結果・
+`output/performance/` のエントリー価格/検証結果)を **git commit + push で永続化**
+している(`git_sync.py`)。`run_screening.py` と `track_performance.py` は実行開始時に
+`git pull --ff-only origin main` で過去の履歴を取得し、実行後に変更を自動でcommit・
+pushする。これにより `weekly_summary.py` / `check_alerts.py` / `track_performance.py --check`
+が前週以前のデータと比較できるようになっている。`cache/` と `data/` は引き続きgitignore対象
+(サイズが大きく、JPX/yfinanceから再取得可能なため)。
+
+### Notionへの保存(制約あり)
+
+このリポジトリを操作するNotion MCP接続には、現時点で `search` / `fetch` /
+`create_pages` / `create_database` / `update_page` が(接続先の権限確認では
+「利用可能」と出るにもかかわらず)実際にはツールとして公開されていない。
+そのため、当初想定していた「TOP10週次トラッキング」データベース(行＝銘柄、
+順位・スコア等をプロパティで保持)の自動作成・書き込みはできない。
+
+**代替として、既存の「AIエージェント運用ハブ」ページ配下に `TOP10週次トラッキング`
+という Folder を作成し(folder_id: `93bb0f24-9bb7-4b36-9b0c-7f4611085a81`)、
+週次レポート(.md)・TOP20 CSV・エントリー価格CSV を毎週ファイル添付として
+保存する運用にしている。** 手順(利用可能なNotionツールのみで完結):
+
+1. `notion-create-attachment`(`content` にファイル本文をインラインで渡す。
+   `notion-create-file-upload` で得た `upload_url` への直接POSTは、この環境の
+   egressプロキシが `api.notion.com` への直接接続を拒否するため使えない)
+2. 返ってきた `file_upload_id` を集めて `notion-update-folder`
+   (`command: "add_files"`, 対象 `folder_id` 上記)で追加
+
+これは構造化データベースではなくファイルの集積なので、Notion上でのフィルタ/
+ソート/プロパティ集計はできない。`search` / `fetch` / `create_pages` /
+`create_database` がこの環境のツールとして実際に使えるようになった場合は、
+当初仕様どおりのデータベース化に切り替えるべき。
