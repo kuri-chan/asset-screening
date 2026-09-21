@@ -29,6 +29,7 @@ import yfinance as yf
 
 import config
 from yf_session import get_session
+import git_sync
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
 logger = logging.getLogger(__name__)
@@ -113,6 +114,8 @@ def record_entry(date_str: str = None):
     out_path = PERF_DIR / f"entry_{date_str}.csv"
     pd.DataFrame(entry_records).to_csv(out_path, index=False)
     logger.info(f"入場価格を記録しました: {out_path}")
+
+    git_sync.commit_and_push(f"Record entry prices {date_str}")
 
 
 def check_performance(entry_date: str):
@@ -199,6 +202,8 @@ def check_performance(entry_date: str):
     result_df.to_csv(out_path, index=False)
     logger.info(f"結果を保存: {out_path}")
 
+    git_sync.commit_and_push(f"Performance check {entry_date} -> {today}")
+
     return result_df
 
 
@@ -228,6 +233,8 @@ def main():
     parser.add_argument("--record", action="store_true", help="本日の選出銘柄の入場価格を記録")
     parser.add_argument("--summary", action="store_true", help="全記録のサマリーを表示")
     args = parser.parse_args()
+
+    git_sync.pull_latest()
 
     if args.check:
         check_performance(args.check)

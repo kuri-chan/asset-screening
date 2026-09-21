@@ -28,6 +28,7 @@ import config
 from universe_loader import load_prime_universe
 from data_fetcher import fetch_universe_data, save_snapshot
 from screener import hard_filter, score_universe, export_top_candidates
+import git_sync
 
 
 def setup_logging():
@@ -51,6 +52,9 @@ def main():
 
     date_str = datetime.now().strftime("%Y-%m-%d")
     logger.info(f"=== スクリーニング開始 {date_str} ===")
+
+    # 過去の output/ 履歴(前回までのtop_candidates/performance)を取得
+    git_sync.pull_latest()
 
     # ============================================================
     # Step 1: ユニバース読み込み
@@ -94,6 +98,9 @@ def main():
     # ============================================================
     logger.info("Step 5: 上位候補を出力")
     md_path = export_top_candidates(scored, date_str)
+
+    # 今回の結果をgitに永続化(次回実行時の前週比較に使う)
+    git_sync.commit_and_push(f"Screening results {date_str}")
 
     logger.info(f"=== 完了 ===")
     logger.info(f"次の作業: {md_path} を開き、上位3-5銘柄を Claude に渡して定性分析を依頼")
