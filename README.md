@@ -138,26 +138,33 @@ pushする。これにより `weekly_summary.py` / `check_alerts.py` / `track_pe
 が前週以前のデータと比較できるようになっている。`cache/` と `data/` は引き続きgitignore対象
 (サイズが大きく、JPX/yfinanceから再取得可能なため)。
 
-### Notionへの保存(制約あり)
+### トラッキング記録: Excel(output/tracking_sheet.xlsx)が正(2026-09-24〜)
 
-このリポジトリを操作するNotion MCP接続には、現時点で `search` / `fetch` /
-`create_pages` / `create_database` / `update_page` が(接続先の権限確認では
-「利用可能」と出るにもかかわらず)実際にはツールとして公開されていない。
-そのため、当初想定していた「TOP10週次トラッキング」データベース(行＝銘柄、
-順位・スコア等をプロパティで保持)の自動作成・書き込みはできない。
+Notion MCP接続には、現時点で `search` / `fetch` / `create_pages` / `create_database` /
+`update_page` が(接続先の権限確認では「利用可能」と出るにもかかわらず)実際には
+ツールとして公開されておらず、構造化データベースの自動作成・書き込みができなかった。
+そのため運用をNotionからExcelブックに切り替えた。
 
-**代替として、既存の「AIエージェント運用ハブ」ページ配下に `TOP10週次トラッキング`
-という Folder を作成し(folder_id: `93bb0f24-9bb7-4b36-9b0c-7f4611085a81`)、
-週次レポート(.md)・TOP20 CSV・エントリー価格CSV を毎週ファイル添付として
-保存する運用にしている。** 手順(利用可能なNotionツールのみで完結):
+`build_tracking_sheet.py` が `output/` 配下の全CSV(`top_candidates_*.csv` /
+`performance/entry_*.csv` / `performance/result_*_checked_*.csv`)から毎回まるごと
+`output/tracking_sheet.xlsx` を再生成する(状態を持たず、CSVが正=source of truth)。
+`track_performance.py` の `--record` と `--check` の最後に自動実行され、
+`git_sync.commit_and_push` で他のoutput/と一緒にコミット・pushされる。
 
-1. `notion-create-attachment`(`content` にファイル本文をインラインで渡す。
-   `notion-create-file-upload` で得た `upload_url` への直接POSTは、この環境の
-   egressプロキシが `api.notion.com` への直接接続を拒否するため使えない)
-2. 返ってきた `file_upload_id` を集めて `notion-update-folder`
-   (`command: "add_files"`, 対象 `folder_id` 上記)で追加
+シート構成:
+- **週次ピック**: 選出日ごとのTOP20(順位・総合スコア・バリュエーション/収益性スコア・入場株価・TOPIX入場値)
+- **価格推移ログ**: `--check` を実行するたびに積み上がる縦持ちログ(選出日・銘柄・確認日・経過日数・入場株価・現在株価・リターン%・TOPIXリターン%・アルファ%pt)
+- **価格推移(ピボット)**: 銘柄 x 確認日 のマトリクス形式。列が確認日ごとに増えていくので、株価推移を横に並べて追える
 
-これは構造化データベースではなくファイルの集積なので、Notion上でのフィルタ/
-ソート/プロパティ集計はできない。`search` / `fetch` / `create_pages` /
-`create_database` がこの環境のツールとして実際に使えるようになった場合は、
-当初仕様どおりのデータベース化に切り替えるべき。
+値はすべてPythonで計算済みの数値として書き込んでいる(=数式ではない)。このファイルは
+手編集を想定せず毎回CSVから丸ごと作り直す設計のため、xlsxスキルの「数式で書く」原則は
+適用外と判断した(LibreOffice経由のrecalc検証もこの環境ではsoffice側がハングし実行不可
+だった。数式を持たないため実害はない)。
+
+週次エージェントは実行の最後に `SendUserFile` で `output/tracking_sheet.xlsx` を
+Kuriに送付すること。
+
+過去に検討したNotionフォルダ添付方式(folder_id: `93bb0f24-9bb7-4b36-9b0c-7f4611085a81`、
+「AIエージェント運用ハブ」配下)は現在使っていない。`search`/`fetch`/`create_pages`/
+`create_database` がこの環境で実際に使えるようになれば、Notionでの構造化管理に
+戻すことも検討可。
