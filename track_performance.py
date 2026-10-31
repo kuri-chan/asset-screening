@@ -77,6 +77,24 @@ def get_current_price(ticker: str) -> float | None:
         return None
 
 
+def get_upcoming_earnings_date(ticker: str, as_of_date: str) -> str | None:
+    """選出日から7日以内に決算発表が予定されていればその日付を返す(取得失敗時はNone)。"""
+    try:
+        tk = yf.Ticker(ticker, session=_session)
+        cal = tk.calendar
+        dates = cal.get("Earnings Date") if isinstance(cal, dict) else None
+        if not dates:
+            return None
+        as_of = pd.Timestamp(as_of_date)
+        for d in dates:
+            d_ts = pd.Timestamp(d)
+            if as_of <= d_ts <= as_of + pd.Timedelta(days=7):
+                return d_ts.strftime("%Y-%m-%d")
+        return None
+    except Exception:
+        return None
+
+
 def record_entry(date_str: str = None):
     """本日の選出銘柄の入場価格を記録する。"""
     if date_str is None:
@@ -100,6 +118,7 @@ def record_entry(date_str: str = None):
         if price is None:
             logger.warning(f"{row['code']} {row['name']}: 入場価格取得失敗")
             continue
+        earnings_soon = get_upcoming_earnings_date(ticker, date_str)
         entry_records.append({
             "entry_date": date_str,
             "code": row["code"],
@@ -107,10 +126,13 @@ def record_entry(date_str: str = None):
             "sector": row.get("sector_33", "–"),
             "rank": _ + 1,
             "total_score": row["total_score"],
+            "market_cap_oku_yen": row.get("market_cap_oku_yen"),
             "entry_price": price,
             "topix_entry": topix_price,
+            "earnings_within_7d": earnings_soon,
         })
-        logger.info(f"  {row['code']} {row['name']}: ¥{price:,.0f}")
+        earn_note = f" ⚠決算{earnings_soon}" if earnings_soon else ""
+        logger.info(f"  {row['code']} {row['name']}: ¥{price:,.0f}{earn_note}")
 
     out_path = PERF_DIR / f"entry_{date_str}.csv"
     pd.DataFrame(entry_records).to_csv(out_path, index=False)
@@ -160,6 +182,8 @@ def check_performance(entry_date: str):
             "sector": row.get("sector", "–"),
             "rank": row["rank"],
             "score": row["total_score"],
+            "market_cap_oku_yen": row.get("market_cap_oku_yen"),
+            "earnings_within_7d": row.get("earnings_within_7d"),
             "entry_date": entry_date,
             "entry_price": entry_price,
             "current_price": current_price,
@@ -185,7 +209,8 @@ def check_performance(entry_date: str):
         alpha_str = f"α {r['alpha_pct']:+.1f}%pt" if r['alpha_pct'] is not None else ""
         topix_str = f"(TOPIX: {r['topix_return_pct']:+.1f}%)" if r['topix_return_pct'] is not None else ""
         sign = "✅" if (r['alpha_pct'] or 0) > 0 else "❌"
-        print(f"{sign} [{r['rank']}位] {r['name']}({r['code']})")
+        earn_note = f"  ⚠決算発表あり({r['earnings_within_7d']})" if pd.notna(r.get("earnings_within_7d")) else ""
+        print(f"{sign} [{r['rank']}位] {r['name']}({r['code']}){earn_note}")
         print(f"     ¥{r['entry_price']:,.0f} → ¥{r['current_price']:,.0f}  {ret_str}  {alpha_str} {topix_str}")
 
     avg_return = result_df["return_pct"].mean()
@@ -197,6 +222,33 @@ def check_performance(entry_date: str):
     if avg_alpha is not None:
         print(f"  平均アルファ:     {avg_alpha:+.1f}%pt vs TOPIX")
         print(f"  TOPIX超過銘柄数: {winners}/{len(results)}社")
+
+    # --- 診断1: セクター集中度 ---
+    if result_df["sector"].notna().any():
+        sector_counts = result_df["sector"].value_counts()
+        top_sector, top_sector_n = sector_counts.index[0], sector_counts.iloc[0]
+        top_sector_pct = top_sector_n / len(result_df) * 100
+        print(f"\n  [診断] セクター集中度: 最大セクター「{top_sector}」{top_sector_n}/{len(result_df)}社 ({top_sector_pct:.0f}%)")
+        if top_sector_pct >= 30:
+            print(f"    ⚠ 単一セクターが30%以上を占めており、セクター固有ニュースへの感応度が高い状態です。")
+
+    # --- 診断2: 時価総額と週次リターンの相関(小型株効果の検出) ---
+    cap_df = result_df.dropna(subset=["market_cap_oku_yen", "return_pct"])
+    if len(cap_df) >= 8:
+        import numpy as np
+        log_cap = np.log(cap_df["market_cap_oku_yen"].astype(float))
+        corr = np.corrcoef(log_cap, cap_df["return_pct"])[0, 1]
+        print(f"  [診断] 時価総額(log)とリターンの相関: {corr:+.2f}")
+        if abs(corr) >= 0.4:
+            direction = "大型株が優位" if corr > 0 else "小型株が優位"
+            print(f"    ⚠ 相関が強く、今週は{direction}の傾向(スコア由来ではなく規模要因の可能性)。次週以降も継続するか要観察。")
+
+    # --- 診断3: 決算発表を伴っていた銘柄 ---
+    earnings_hits = result_df[result_df["earnings_within_7d"].notna()]
+    if not earnings_hits.empty:
+        names = ", ".join(f"{r['name']}({r['earnings_within_7d']})" for _, r in earnings_hits.iterrows())
+        print(f"  [診断] 追跡期間中に決算発表があった銘柄: {names}")
+
     print(f"{'='*60}\n")
 
     # CSVに保存
